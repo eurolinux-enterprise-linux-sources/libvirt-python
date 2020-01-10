@@ -1,12 +1,12 @@
 
 %define with_python3 0
-%if 0%{?fedora} > 18
+%if 0%{?fedora}
 %define with_python3 1
 %endif
 
 Summary: The libvirt virtualization API python2 binding
 Name: libvirt-python
-Version: 3.2.0
+Version: 3.9.0
 Release: 1%{?dist}%{?extra_release}
 Source0: http://libvirt.org/sources/python/%{name}-%{version}.tar.gz
 Url: http://libvirt.org
@@ -32,15 +32,33 @@ written in the Python programming language to use the interface
 supplied by the libvirt library to use the virtualization capabilities
 of recent versions of Linux (and other OSes).
 
+%package -n python2-libvirt
+Summary: The libvirt virtualization API python2 binding
+Url: http://libvirt.org
+License: LGPLv2+
+Group: Development/Libraries
+%{?python_provide:%python_provide python2-libvirt}
+Provides: libvirt-python = %{version}-%{release}
+Obsoletes: libvirt-python <= 3.6.0-1%{?dist}
+
+%description -n python2-libvirt
+The python2-libvirt package contains a module that permits applications
+written in the Python programming language to use the interface
+supplied by the libvirt library to use the virtualization capabilities
+of recent versions of Linux (and other OSes).
+
 %if %{with_python3}
-%package -n libvirt-python3
+%package -n python3-libvirt
 Summary: The libvirt virtualization API python3 binding
 Url: http://libvirt.org
 License: LGPLv2+
 Group: Development/Libraries
+%{?python_provide:%python_provide python3-libvirt}
+Provides: libvirt-python3 = %{version}-%{release}
+Obsoletes: libvirt-python3 <= 3.6.0-1%{?dist}
 
-%description -n libvirt-python3
-The libvirt-python package contains a module that permits applications
+%description -n python3-libvirt
+The python3-libvirt package contains a module that permits applications
 written in the Python programming language to use the interface
 supplied by the libvirt library to use the virtualization capabilities
 of recent versions of Linux (and other OSes).
@@ -65,7 +83,6 @@ CFLAGS="$RPM_OPT_FLAGS" %{__python3} setup.py build
 %if %{with_python3}
 %{__python3} setup.py install --skip-build --root=%{buildroot}
 %endif
-rm -f %{buildroot}%{_libdir}/python*/site-packages/*egg-info
 
 %check
 %{__python} setup.py test
@@ -73,25 +90,29 @@ rm -f %{buildroot}%{_libdir}/python*/site-packages/*egg-info
 %{__python3} setup.py test
 %endif
 
-%files
+%files -n python2-libvirt
 %defattr(-,root,root)
 %doc ChangeLog AUTHORS NEWS README COPYING COPYING.LESSER examples/
 %{_libdir}/python2*/site-packages/libvirt.py*
 %{_libdir}/python2*/site-packages/libvirt_qemu.py*
 %{_libdir}/python2*/site-packages/libvirt_lxc.py*
 %{_libdir}/python2*/site-packages/libvirtmod*
+%{_libdir}/python2*/site-packages/*egg-info
 
 %if %{with_python3}
-%files -n libvirt-python3
+%files -n python3-libvirt
 %defattr(-,root,root)
 %doc ChangeLog AUTHORS NEWS README COPYING COPYING.LESSER examples/
 %{_libdir}/python3*/site-packages/libvirt.py*
+%{_libdir}/python3*/site-packages/libvirtaio.py*
 %{_libdir}/python3*/site-packages/libvirt_qemu.py*
 %{_libdir}/python3*/site-packages/libvirt_lxc.py*
 %{_libdir}/python3*/site-packages/__pycache__/libvirt.cpython-*.py*
 %{_libdir}/python3*/site-packages/__pycache__/libvirt_qemu.cpython-*.py*
 %{_libdir}/python3*/site-packages/__pycache__/libvirt_lxc.cpython-*.py*
+%{_libdir}/python3*/site-packages/__pycache__/libvirtaio.cpython-*.py*
 %{_libdir}/python3*/site-packages/libvirtmod*
+%{_libdir}/python3*/site-packages/*egg-info
 %endif
 
 %changelog

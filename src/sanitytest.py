@@ -167,7 +167,8 @@ for cname in wantfunctions:
     # These aren't functions, they're callback signatures
     if name in ["virConnectAuthCallbackPtr", "virConnectCloseFunc",
                 "virStreamSinkFunc", "virStreamSourceFunc", "virStreamEventCallback",
-                "virEventHandleCallback", "virEventTimeoutCallback", "virFreeCallback"]:
+                "virEventHandleCallback", "virEventTimeoutCallback", "virFreeCallback",
+                "virStreamSinkHoleFunc", "virStreamSourceHoleFunc", "virStreamSourceSkipFunc"]:
         continue
     if name[0:21] == "virConnectDomainEvent" and name[-8:] == "Callback":
         continue
@@ -349,7 +350,9 @@ for klass in gotfunctions:
         continue
     for func in sorted(gotfunctions[klass]):
         # These are pure python methods with no C APi
-        if func in ["connect", "getConnect", "domain", "getDomain"]:
+        if func in ["connect", "getConnect", "domain", "getDomain",
+                    "virEventInvokeFreeCallback",
+                    "sparseRecvAll", "sparseSendAll"]:
             continue
 
         key = "%s.%s" % (klass, func)
@@ -372,7 +375,8 @@ for name in sorted(finalklassmap):
 
     # These exist in C and exist in python, but we've got
     # a pure-python impl so don't check them
-    if name in ["virStreamRecvAll", "virStreamSendAll"]:
+    if name in ["virStreamRecvAll", "virStreamSendAll",
+            "virStreamSparseRecvAll", "virStreamSparseSendAll"]:
         continue
 
     try:

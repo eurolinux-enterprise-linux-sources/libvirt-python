@@ -15,16 +15,19 @@ import errno
 import time
 import threading
 
-# For the sake of demonstration, this example program includes
-# an implementation of a pure python event loop. Most applications
-# would be better off just using the default libvirt event loop
-# APIs, instead of implementing this in python. The exception is
-# where an application wants to integrate with an existing 3rd
-# party event loop impl
+# This example can use three different event loop impls. It defaults
+# to a portable pure-python impl based on poll that is implemented
+# in this file.
 #
-# Change this to 'False' to make the demo use the native
-# libvirt event loop impl
-use_pure_python_event_loop = True
+# When Python >= 3.4, it can optionally use an impl based on the
+# new asyncio module.
+#
+# Finally, it can also use the libvirt native event loop impl
+#
+# This setting thus allows 'poll', 'native' or 'asyncio' as valid
+# choices
+#
+event_impl = "poll"
 
 do_debug = False
 def debug(msg):
@@ -39,10 +42,10 @@ def debug(msg):
 #
 # It is a pure python implementation based around the poll() API
 #
-class virEventLoopPure:
+class virEventLoopPoll:
     # This class contains the data we need to track for a
     # single file handle
-    class virEventLoopPureHandle:
+    class virEventLoopPollHandle:
         def __init__(self, handle, fd, events, cb, opaque):
             self.handle = handle
             self.fd = fd
@@ -70,7 +73,7 @@ class virEventLoopPure:
 
     # This class contains the data we need to track for a
     # single periodic timer
-    class virEventLoopPureTimer:
+    class virEventLoopPollTimer:
         def __init__(self, timer, interval, cb, opaque):
             self.timer = timer
             self.interval = interval
@@ -107,6 +110,7 @@ class virEventLoopPure:
         self.nextTimerID = 1
         self.handles = []
         self.timers = []
+        self.cleanup = []
         self.quit = False
 
         # The event loop can be used from multiple threads at once.
@@ -141,14 +145,14 @@ class virEventLoopPure:
 
         return next
 
-    # Lookup a virEventLoopPureHandle object based on file descriptor
+    # Lookup a virEventLoopPollHandle object based on file descriptor
     def get_handle_by_fd(self, fd):
         for h in self.handles:
             if h.get_fd() == fd:
                 return h
         return None
 
-    # Lookup a virEventLoopPureHandle object based on its event loop ID
+    # Lookup a virEventLoopPollHandle object based on its event loop ID
     def get_handle_by_id(self, handleID):
         for h in self.handles:
             if h.get_id() == handleID:
@@ -178,6 +182,11 @@ class virEventLoopPure:
     def run_once(self):
         sleep = -1
         self.runningPoll = True
+
+        for opaque in self.cleanup:
+            libvirt.virEventInvokeFreeCallback(opaque)
+        self.cleanup = []
+
         try:
             next = self.next_timeout()
             debug("Next timeout due at %d" % next)
@@ -247,7 +256,7 @@ class virEventLoopPure:
         handleID = self.nextHandleID + 1
         self.nextHandleID = self.nextHandleID + 1
 
-        h = self.virEventLoopPureHandle(handleID, fd, events, cb, opaque)
+        h = self.virEventLoopPollHandle(handleID, fd, events, cb, opaque)
         self.handles.append(h)
 
         self.poll.register(fd, self.events_to_poll(events))
@@ -266,7 +275,7 @@ class virEventLoopPure:
         timerID = self.nextTimerID + 1
         self.nextTimerID = self.nextTimerID + 1
 
-        h = self.virEventLoopPureTimer(timerID, interval, cb, opaque)
+        h = self.virEventLoopPollTimer(timerID, interval, cb, opaque)
         self.timers.append(h)
         self.interrupt()
 
@@ -300,8 +309,9 @@ class virEventLoopPure:
         handles = []
         for h in self.handles:
             if h.get_id() == handleID:
-                self.poll.unregister(h.get_fd())
                 debug("Remove handle %d fd %d" % (handleID, h.get_fd()))
+                self.poll.unregister(h.get_fd())
+                self.cleanup.append(h.opaque)
             else:
                 handles.append(h)
         self.handles = handles
@@ -313,7 +323,9 @@ class virEventLoopPure:
         for h in self.timers:
             if h.get_id() != timerID:
                 timers.append(h)
+            else:
                 debug("Remove timer %d" % timerID)
+                self.cleanup.append(h.opaque)
         self.timers = timers
         self.interrupt()
 
@@ -352,7 +364,7 @@ class virEventLoopPure:
 
 # This single global instance of the event loop wil be used for
 # monitoring libvirt events
-eventLoop = virEventLoopPure()
+eventLoop = virEventLoopPoll()
 
 # This keeps track of what thread is running the event loop,
 # (if it is run in a background thread)
@@ -362,7 +374,7 @@ eventLoopThread = None
 # These next set of 6 methods are the glue between the official
 # libvirt events API, and our particular impl of the event loop
 #
-# There is no reason why the 'virEventLoopPure' has to be used.
+# There is no reason why the 'virEventLoopPoll' has to be used.
 # An application could easily may these 6 glue methods hook into
 # another event loop such as GLib's, or something like the python
 # Twisted event framework.
@@ -393,7 +405,7 @@ def virEventRemoveTimerImpl(timerID):
 
 # This tells libvirt what event loop implementation it
 # should use
-def virEventLoopPureRegister():
+def virEventLoopPollRegister():
     libvirt.virEventRegisterImpl(virEventAddHandleImpl,
                                  virEventUpdateHandleImpl,
                                  virEventRemoveHandleImpl,
@@ -402,19 +414,34 @@ def virEventLoopPureRegister():
                                  virEventRemoveTimerImpl)
 
 # Directly run the event loop in the current thread
-def virEventLoopPureRun():
+def virEventLoopPollRun():
     global eventLoop
     eventLoop.run_loop()
+
+def virEventLoopAIORun(loop):
+    import asyncio
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
 
 def virEventLoopNativeRun():
     while True:
         libvirt.virEventRunDefaultImpl()
 
 # Spawn a background thread to run the event loop
-def virEventLoopPureStart():
+def virEventLoopPollStart():
     global eventLoopThread
-    virEventLoopPureRegister()
-    eventLoopThread = threading.Thread(target=virEventLoopPureRun, name="libvirtEventLoop")
+    virEventLoopPollRegister()
+    eventLoopThread = threading.Thread(target=virEventLoopPollRun, name="libvirtEventLoop")
+    eventLoopThread.setDaemon(True)
+    eventLoopThread.start()
+
+def virEventLoopAIOStart():
+    global eventLoopThread
+    import libvirtaio
+    import asyncio
+    loop = asyncio.new_event_loop()
+    libvirtaio.virEventRegisterAsyncIOImpl(loop=loop)
+    eventLoopThread = threading.Thread(target=virEventLoopAIORun, args=(loop,), name="libvirtEventLoop")
     eventLoopThread.setDaemon(True)
     eventLoopThread.start()
 
@@ -450,7 +477,7 @@ def domDetailToString(event, detail):
         ( "Paused", "Migrated", "IOError", "Watchdog", "Restored", "Snapshot", "API error" ),
         ( "Unpaused", "Migrated", "Snapshot" ),
         ( "Shutdown", "Destroyed", "Crashed", "Migrated", "Saved", "Failed", "Snapshot"),
-        ( "Finished", ),
+        ( "Finished", "On guest request", "On host request"),
         ( "Memory", "Disk" ),
         ( "Panicked", ),
         )
@@ -641,16 +668,18 @@ def usage():
     print("   uri will default to qemu:///system")
     print("   --help, -h   Print(this help message")
     print("   --debug, -d  Print(debug output")
-    print("   --loop, -l   Toggle event-loop-implementation")
+    print("   --loop=TYPE, -l   Choose event-loop-implementation (native, poll, asyncio)")
+    print("   --timeout=SECS  Quit after SECS seconds running")
 
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hdl", ["help", "debug", "loop"])
+        opts, args = getopt.getopt(sys.argv[1:], "hdl:", ["help", "debug", "loop=", "timeout="])
     except getopt.GetoptError as err:
         # print help information and exit:
         print(str(err)) # will print something like "option -a not recognized"
         usage()
         sys.exit(2)
+    timeout = None
     for o, a in opts:
         if o in ("-h", "--help"):
             usage()
@@ -659,19 +688,23 @@ def main():
             global do_debug
             do_debug = True
         if o in ("-l", "--loop"):
-            global use_pure_python_event_loop
-            use_pure_python_event_loop ^= True
+            global event_impl
+            event_impl = a
+        if o in ("--timeout"):
+            timeout = int(a)
 
     if len(args) >= 1:
         uri = args[0]
     else:
         uri = "qemu:///system"
 
-    print("Using uri:" + uri)
+    print("Using uri '%s' and event loop '%s'" % (uri, event_impl))
 
     # Run a background thread with the event loop
-    if use_pure_python_event_loop:
-        virEventLoopPureStart()
+    if event_impl == "poll":
+        virEventLoopPollStart()
+    elif event_impl == "asyncio":
+        virEventLoopAIOStart()
     else:
         virEventLoopNativeStart()
 
@@ -689,42 +722,47 @@ def main():
 
     #Add 2 lifecycle callbacks to prove this works with more than just one
     vc.domainEventRegister(myDomainEventCallback1,None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_LIFECYCLE, myDomainEventCallback2, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_REBOOT, myDomainEventRebootCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_RTC_CHANGE, myDomainEventRTCChangeCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_WATCHDOG, myDomainEventWatchdogCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_IO_ERROR, myDomainEventIOErrorCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_GRAPHICS, myDomainEventGraphicsCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_IO_ERROR_REASON, myDomainEventIOErrorReasonCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_CONTROL_ERROR, myDomainEventControlErrorCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_BLOCK_JOB, myDomainEventBlockJobCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_DISK_CHANGE, myDomainEventDiskChangeCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_TRAY_CHANGE, myDomainEventTrayChangeCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_PMWAKEUP, myDomainEventPMWakeupCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_PMSUSPEND, myDomainEventPMSuspendCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_BALLOON_CHANGE, myDomainEventBalloonChangeCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_PMSUSPEND_DISK, myDomainEventPMSuspendDiskCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_DEVICE_REMOVED, myDomainEventDeviceRemovedCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_BLOCK_JOB_2, myDomainEventBlockJob2Callback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_TUNABLE, myDomainEventTunableCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_AGENT_LIFECYCLE, myDomainEventAgentLifecycleCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_DEVICE_ADDED, myDomainEventDeviceAddedCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_MIGRATION_ITERATION, myDomainEventMigrationIteration, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_JOB_COMPLETED, myDomainEventJobCompletedCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_DEVICE_REMOVAL_FAILED, myDomainEventDeviceRemovalFailedCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_METADATA_CHANGE, myDomainEventMetadataChangeCallback, None)
-    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_BLOCK_THRESHOLD, myDomainEventBlockThresholdCallback, None)
+    domcallbacks = []
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_LIFECYCLE, myDomainEventCallback2, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_REBOOT, myDomainEventRebootCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_RTC_CHANGE, myDomainEventRTCChangeCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_WATCHDOG, myDomainEventWatchdogCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_IO_ERROR, myDomainEventIOErrorCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_GRAPHICS, myDomainEventGraphicsCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_IO_ERROR_REASON, myDomainEventIOErrorReasonCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_CONTROL_ERROR, myDomainEventControlErrorCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_BLOCK_JOB, myDomainEventBlockJobCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_DISK_CHANGE, myDomainEventDiskChangeCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_TRAY_CHANGE, myDomainEventTrayChangeCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_PMWAKEUP, myDomainEventPMWakeupCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_PMSUSPEND, myDomainEventPMSuspendCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_BALLOON_CHANGE, myDomainEventBalloonChangeCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_PMSUSPEND_DISK, myDomainEventPMSuspendDiskCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_DEVICE_REMOVED, myDomainEventDeviceRemovedCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_BLOCK_JOB_2, myDomainEventBlockJob2Callback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_TUNABLE, myDomainEventTunableCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_AGENT_LIFECYCLE, myDomainEventAgentLifecycleCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_DEVICE_ADDED, myDomainEventDeviceAddedCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_MIGRATION_ITERATION, myDomainEventMigrationIteration, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_JOB_COMPLETED, myDomainEventJobCompletedCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_DEVICE_REMOVAL_FAILED, myDomainEventDeviceRemovalFailedCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_METADATA_CHANGE, myDomainEventMetadataChangeCallback, None))
+    domcallbacks.append(vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_BLOCK_THRESHOLD, myDomainEventBlockThresholdCallback, None))
 
-    vc.networkEventRegisterAny(None, libvirt.VIR_NETWORK_EVENT_ID_LIFECYCLE, myNetworkEventLifecycleCallback, None)
+    netcallbacks = []
+    netcallbacks.append(vc.networkEventRegisterAny(None, libvirt.VIR_NETWORK_EVENT_ID_LIFECYCLE, myNetworkEventLifecycleCallback, None))
 
-    vc.storagePoolEventRegisterAny(None, libvirt.VIR_STORAGE_POOL_EVENT_ID_LIFECYCLE, myStoragePoolEventLifecycleCallback, None)
-    vc.storagePoolEventRegisterAny(None, libvirt.VIR_STORAGE_POOL_EVENT_ID_REFRESH, myStoragePoolEventRefreshCallback, None)
+    poolcallbacks = []
+    poolcallbacks.append(vc.storagePoolEventRegisterAny(None, libvirt.VIR_STORAGE_POOL_EVENT_ID_LIFECYCLE, myStoragePoolEventLifecycleCallback, None))
+    poolcallbacks.append(vc.storagePoolEventRegisterAny(None, libvirt.VIR_STORAGE_POOL_EVENT_ID_REFRESH, myStoragePoolEventRefreshCallback, None))
 
-    vc.nodeDeviceEventRegisterAny(None, libvirt.VIR_NODE_DEVICE_EVENT_ID_LIFECYCLE, myNodeDeviceEventLifecycleCallback, None)
-    vc.nodeDeviceEventRegisterAny(None, libvirt.VIR_NODE_DEVICE_EVENT_ID_UPDATE, myNodeDeviceEventUpdateCallback, None)
+    devcallbacks = []
+    devcallbacks.append(vc.nodeDeviceEventRegisterAny(None, libvirt.VIR_NODE_DEVICE_EVENT_ID_LIFECYCLE, myNodeDeviceEventLifecycleCallback, None))
+    devcallbacks.append(vc.nodeDeviceEventRegisterAny(None, libvirt.VIR_NODE_DEVICE_EVENT_ID_UPDATE, myNodeDeviceEventUpdateCallback, None))
 
-    vc.secretEventRegisterAny(None, libvirt.VIR_SECRET_EVENT_ID_LIFECYCLE, mySecretEventLifecycleCallback, None)
-    vc.secretEventRegisterAny(None, libvirt.VIR_SECRET_EVENT_ID_VALUE_CHANGED, mySecretEventValueChanged, None)
+    seccallbacks = []
+    seccallbacks.append(vc.secretEventRegisterAny(None, libvirt.VIR_SECRET_EVENT_ID_LIFECYCLE, mySecretEventLifecycleCallback, None))
+    seccallbacks.append(vc.secretEventRegisterAny(None, libvirt.VIR_SECRET_EVENT_ID_VALUE_CHANGED, mySecretEventValueChanged, None))
 
     vc.setKeepAlive(5, 3)
 
@@ -732,9 +770,29 @@ def main():
     # of demo we'll just go to sleep. The other option is to
     # run the event loop in your main thread if your app is
     # totally event based.
-    while run:
+    count = 0
+    while run and (timeout is None or count < timeout):
+        count = count + 1
         time.sleep(1)
 
+    vc.domainEventDeregister(myDomainEventCallback1)
+
+    for id in seccallbacks:
+        vc.secretEventDeregisterAny(id)
+    for id in devcallbacks:
+        vc.nodeDeviceEventDeregisterAny(id)
+    for id in poolcallbacks:
+        vc.storagePoolEventDeregisterAny(id)
+    for id in netcallbacks:
+        vc.networkEventDeregisterAny(id)
+    for id in domcallbacks:
+        vc.domainEventDeregisterAny(id)
+
+    vc.unregisterCloseCallback()
+    vc.close()
+
+    # Allow delayed event loop cleanup to run, just for sake of testing
+    time.sleep(2)
 
 if __name__ == "__main__":
     main()

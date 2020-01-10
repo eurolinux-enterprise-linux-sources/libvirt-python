@@ -1,21 +1,19 @@
 
 %define with_python3 0
-%if 0%{?fedora} > 18
+%if 0%{?fedora}
 %define with_python3 1
 %endif
 
 Summary: The libvirt virtualization API python2 binding
 Name: libvirt-python
-Version: 3.2.0
-Release: 3%{?dist}.1%{?extra_release}
+Version: 3.9.0
+Release: 1%{?dist}%{?extra_release}
 Source0: http://libvirt.org/sources/python/%{name}-%{version}.tar.gz
-Patch1: libvirt-python-Release-the-GIL-during-virDomainGetMemoryStats-virDomainGetDiskErrors.patch
-
 Url: http://libvirt.org
 License: LGPLv2+
 Group: Development/Libraries
 BuildRequires: git
-BuildRequires: libvirt-devel >= 3.2.0-9%{?dist}
+BuildRequires: libvirt-devel >= 3.9.0-1%{?dist}
 BuildRequires: python-devel
 BuildRequires: python-nose
 BuildRequires: python-lxml
@@ -57,42 +55,6 @@ of recent versions of Linux (and other OSes).
 # for the -python3 package
 find examples -type f -exec chmod 0644 \{\} \;
 
-# Patches have to be stored in a temporary file because RPM has
-# a limit on the length of the result of any macro expansion;
-# if the string is longer, it's silently cropped
-%{lua:
-    tmp = os.tmpname();
-    f = io.open(tmp, "w+");
-    count = 0;
-    for i, p in ipairs(patches) do
-        f:write(p.."\n");
-        count = count + 1;
-    end;
-    f:close();
-    print("PATCHCOUNT="..count.."\n")
-    print("PATCHLIST="..tmp.."\n")
-}
-
-git init -q
-git config user.name rpm-build
-git config user.email rpm-build
-git config gc.auto 0
-git add .
-git commit -q -a --author 'rpm-build <rpm-build>' \
-           -m '%{name}-%{version} base'
-
-COUNT=$(grep '\.patch$' $PATCHLIST | wc -l)
-if [ $COUNT -ne $PATCHCOUNT ]; then
-    echo "Found $COUNT patches in $PATCHLIST, expected $PATCHCOUNT"
-    exit 1
-fi
-if [ $COUNT -gt 0 ]; then
-    xargs git am <$PATCHLIST || exit 1
-fi
-echo "Applied $COUNT patches"
-rm -f $PATCHLIST
-
-
 %build
 CFLAGS="$RPM_OPT_FLAGS" %{__python} setup.py build
 %if %{with_python3}
@@ -104,7 +66,6 @@ CFLAGS="$RPM_OPT_FLAGS" %{__python3} setup.py build
 %if %{with_python3}
 %{__python3} setup.py install --skip-build --root=%{buildroot}
 %endif
-rm -f %{buildroot}%{_libdir}/python*/site-packages/*egg-info
 
 %check
 %{__python} setup.py test
@@ -119,23 +80,39 @@ rm -f %{buildroot}%{_libdir}/python*/site-packages/*egg-info
 %{_libdir}/python2*/site-packages/libvirt_qemu.py*
 %{_libdir}/python2*/site-packages/libvirt_lxc.py*
 %{_libdir}/python2*/site-packages/libvirtmod*
+%{_libdir}/python2*/site-packages/*egg-info
 
 %if %{with_python3}
 %files -n libvirt-python3
 %defattr(-,root,root)
 %doc ChangeLog AUTHORS NEWS README COPYING COPYING.LESSER examples/
 %{_libdir}/python3*/site-packages/libvirt.py*
+%{_libdir}/python3*/site-packages/libvirtaio.py*
 %{_libdir}/python3*/site-packages/libvirt_qemu.py*
 %{_libdir}/python3*/site-packages/libvirt_lxc.py*
 %{_libdir}/python3*/site-packages/__pycache__/libvirt.cpython-*.py*
 %{_libdir}/python3*/site-packages/__pycache__/libvirt_qemu.cpython-*.py*
 %{_libdir}/python3*/site-packages/__pycache__/libvirt_lxc.cpython-*.py*
+%{_libdir}/python3*/site-packages/__pycache__/libvirtaio.cpython-*.py*
 %{_libdir}/python3*/site-packages/libvirtmod*
+%{_libdir}/python3*/site-packages/*egg-info
 %endif
 
 %changelog
-* Mon Oct  2 2017 Jiri Denemark <jdenemar@redhat.com> - 3.2.0-3.el7_4.1
-- Release the GIL during virDomainGetMemoryStats & virDomainGetDiskErrors (rhbz#1497197)
+* Fri Nov  3 2017 Jiri Denemark <jdenemar@redhat.com> - 3.9.0-1
+- Rebased to libvirt-python-3.9.0 (rhbz#1472265)
+- The rebase also fixes the following bugs:
+    rhbz#1472265
+
+* Tue Oct 10 2017 Jiri Denemark <jdenemar@redhat.com> - 3.8.0-1
+- Rebased to libvirt-python-3.8.0 (rhbz#1472265)
+- The rebase also fixes the following bugs:
+    rhbz#1472265, rhbz#1496517
+
+* Tue Sep  5 2017 Jiri Denemark <jdenemar@redhat.com> - 3.7.0-1
+- Rebased to libvirt-python-3.7.0 (rhbz#1472265)
+- The rebase also fixes the following bugs:
+    rhbz#1463188
 
 * Wed Jun  7 2017 Jiri Denemark <jdenemar@redhat.com> - 3.2.0-3
 - rebuild libvirt-python to pickup new flag for virDomainBlockCopy (rhbz#1459183)

@@ -14,6 +14,7 @@ import sys
 import os
 import os.path
 import re
+import shutil
 import time
 
 MIN_LIBVIRT = "0.9.11"
@@ -49,6 +50,12 @@ def have_libvirt_lxc():
         return True
     except DistutilsExecError:
         return False
+
+def have_libvirtaio():
+    # This depends on asyncio, which in turn depends on "yield from" syntax.
+    # The asyncio module itself is in standard library since 3.4, but there is
+    # an out-of-tree version compatible with 3.3.
+    return sys.version_info >= (3, 3)
 
 def get_pkgconfig_data(args, mod, required=True):
     """Run pkg-config to and return content associated with it"""
@@ -124,6 +131,9 @@ def get_module_lists():
         c_modules.append(modulelxc)
         py_modules.append("libvirt_lxc")
 
+    if have_libvirtaio():
+        py_modules.append("libvirtaio")
+
     return c_modules, py_modules
 
 
@@ -141,6 +151,8 @@ class my_build(build):
         self.spawn([sys.executable, "generator.py", "libvirt-qemu", apis[1]])
         if have_libvirt_lxc():
             self.spawn([sys.executable, "generator.py", "libvirt-lxc", apis[2]])
+        if have_libvirtaio():
+            shutil.copy('libvirtaio.py', 'build')
 
         build.run(self)
 
@@ -278,15 +290,16 @@ class my_test(Command):
                                               'lib' + plat_specifier)
 
     def find_nosetests_path(self):
-        paths = [
-            "/usr/bin/nosetests-%d.%d" % (sys.version_info[0],
-                                          sys.version_info[1]),
-            "/usr/bin/nosetests-%d" % (sys.version_info[0]),
-            "/usr/bin/nosetests",
+        binaries = [
+            "nosetests-%d.%d" % (sys.version_info[0],
+                                 sys.version_info[1]),
+            "nosetests-%d" % (sys.version_info[0]),
+            "nosetests",
         ]
 
-        for path in paths:
-            if os.path.exists(path):
+        for binary in binaries:
+            path = distutils.spawn.find_executable(binary)
+            if path is not None:
                 return path
 
         raise Exception("Cannot find any nosetests binary")
@@ -322,7 +335,7 @@ class my_clean(clean):
 _c_modules, _py_modules = get_module_lists()
 
 setup(name = 'libvirt-python',
-      version = '3.2.0',
+      version = '3.9.0',
       url = 'http://www.libvirt.org',
       maintainer = 'Libvirt Maintainers',
       maintainer_email = 'libvir-list@redhat.com',
