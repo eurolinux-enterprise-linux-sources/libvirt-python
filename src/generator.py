@@ -365,13 +365,7 @@ py_types = {
     'const virDomainSnapshot *':  ('O', "virDomainSnapshot", "virDomainSnapshotPtr", "virDomainSnapshotPtr"),
 }
 
-py_return_types = {
-}
-
 unknown_types = {}
-
-foreign_encoding_args = (
-)
 
 #######################################################################
 #
@@ -455,6 +449,7 @@ skip_impl = (
     'virStoragePoolLookupByUUID',
     'virStoragePoolGetInfo',
     'virStorageVolGetInfo',
+    'virStorageVolGetInfoFlags',
     'virStoragePoolGetAutostart',
     'virStoragePoolListVolumes',
     'virDomainBlockPeek',
@@ -525,6 +520,10 @@ skip_function = (
     'virConnectNetworkEventDeregisterAny', # overridden in virConnect.py
     'virConnectStoragePoolEventRegisterAny',   # overridden in virConnect.py
     'virConnectStoragePoolEventDeregisterAny', # overridden in virConnect.py
+    'virConnectNodeDeviceEventRegisterAny',   # overridden in virConnect.py
+    'virConnectNodeDeviceEventDeregisterAny', # overridden in virConnect.py
+    'virConnectSecretEventRegisterAny',   # overridden in virConnect.py
+    'virConnectSecretEventDeregisterAny', # overridden in virConnect.py
     'virSaveLastError', # We have our own python error wrapper
     'virFreeError', # Only needed if we use virSaveLastError
     'virConnectListAllDomains', # overridden in virConnect.py
@@ -688,8 +687,6 @@ def print_function_wrapper(module, name, output, export, include):
         c_args = c_args + "    %s %s;\n" % (arg[1], arg[0])
         if arg[1] in py_types:
             (f, t, n, c) = py_types[arg[1]]
-            if (f == 'z') and (name in foreign_encoding_args) and (num_bufs == 0):
-                f = 't#'
             if f is not None:
                 format = format + f
             if t is not None:
@@ -739,14 +736,6 @@ def print_function_wrapper(module, name, output, export, include):
             c_call = "\n    c_retval = %s->%s;\n" % (args[0][0], ret[2])
         else:
             c_call = "\n    c_retval = %s(%s);\n" % (name, c_call)
-        ret_convert = "    py_retval = libvirt_%sWrap((%s) c_retval);\n" % (n,c)
-        if n == "charPtr":
-            ret_convert = ret_convert + "    free(c_retval);\n"
-        ret_convert = ret_convert + "    return py_retval;\n"
-    elif ret[0] in py_return_types:
-        (f, t, n, c) = py_return_types[ret[0]]
-        c_return = "    %s c_retval;\n" % (ret[0])
-        c_call = "\n    c_retval = %s(%s);\n" % (name, c_call)
         ret_convert = "    py_retval = libvirt_%sWrap((%s) c_retval);\n" % (n,c)
         if n == "charPtr":
             ret_convert = ret_convert + "    free(c_retval);\n"
@@ -863,7 +852,6 @@ def print_c_pointer(classname, output, export, include):
 
 def buildStubs(module, api_xml):
     global py_types
-    global py_return_types
     global unknown_types
     global onlyOverrides
 
@@ -1021,16 +1009,10 @@ classes_type = {
     "virDomainSnapshot *": ("._o", "virDomainSnapshot(self, _obj=%s)", "virDomainSnapshot"),
 }
 
-converter_type = {
-}
-
 primary_classes = ["virDomain", "virNetwork", "virInterface",
                    "virStoragePool", "virStorageVol",
                    "virConnect", "virNodeDevice", "virSecret",
                    "virNWFilter", "virStream", "virDomainSnapshot"]
-
-classes_ancestor = {
-}
 
 classes_destructors = {
     "virDomain": "virDomainFree",
@@ -1069,14 +1051,9 @@ functions_noexcept = {
     'virNWFilterGetName': True,
 }
 
-reference_keepers = {
-}
-
 function_classes = {}
 
 function_classes["None"] = []
-
-function_post = {}
 
 # Functions returning an integral type which need special rules to
 # check for errors and raise exceptions.
@@ -1089,12 +1066,7 @@ def is_integral_type (name):
     return not re.search ("^(unsigned)? ?(int|long)$", name) is None
 
 def is_optional_arg(info):
-    return re.search("^\(?\optional\)?", info) is not None
-# Functions returning lists which need special rules to check for errors
-# and raise exceptions.
-functions_list_exception_test = {
-}
-functions_list_default_test = "%s is None"
+    return re.search("^\(?optional\)?", info) is not None
 
 def is_python_noninteger_type (name):
 
@@ -1295,15 +1267,12 @@ def writeDoc(module, name, args, indent, output):
 def buildWrappers(module):
     global ctypes
     global py_types
-    global py_return_types
     global unknown_types
     global functions
     global function_classes
     global classes_type
     global classes_list
     global primary_classes
-    global classes_ancestor
-    global converter_type
     global classes_destructors
     global functions_noexcept
 
@@ -1473,11 +1442,7 @@ def buildWrappers(module):
 
                 elif is_python_noninteger_type (ret[0]):
                     if name not in functions_noexcept:
-                        if name in functions_list_exception_test:
-                            test = functions_list_exception_test[name]
-                        else:
-                            test = functions_list_default_test
-                        classes.write (("    if " + test +
+                        classes.write (("    if %s is None" +
                                         ": raise libvirtError ('%s() failed')\n") %
                                        ("ret", name))
                     classes.write("    return ret\n")
@@ -1491,43 +1456,29 @@ def buildWrappers(module):
         if classname == "None":
             pass
         else:
-            if classname in classes_ancestor:
-                classes.write("class %s(%s):\n" % (classname,
-                              classes_ancestor[classname]))
-                classes.write("    def __init__(self, _obj=None):\n")
-                if classname in reference_keepers:
-                    rlist = reference_keepers[classname]
-                    for ref in rlist:
-                        classes.write("        self.%s = None\n" % ref[1])
-                classes.write("        self._o = _obj\n")
-                classes.write("        %s.__init__(self, _obj=_obj)\n\n" % (
-                              classes_ancestor[classname]))
+            classes.write("class %s(object):\n" % (classname))
+            if classname in [ "virDomain", "virNetwork", "virInterface", "virStoragePool",
+                              "virStorageVol", "virNodeDevice", "virSecret","virStream",
+                              "virNWFilter" ]:
+                classes.write("    def __init__(self, conn, _obj=None):\n")
+            elif classname in [ 'virDomainSnapshot' ]:
+                classes.write("    def __init__(self, dom, _obj=None):\n")
             else:
-                classes.write("class %s(object):\n" % (classname))
-                if classname in [ "virDomain", "virNetwork", "virInterface", "virStoragePool",
-                                  "virStorageVol", "virNodeDevice", "virSecret","virStream",
-                                  "virNWFilter" ]:
-                    classes.write("    def __init__(self, conn, _obj=None):\n")
-                elif classname in [ 'virDomainSnapshot' ]:
-                    classes.write("    def __init__(self, dom, _obj=None):\n")
-                else:
-                    classes.write("    def __init__(self, _obj=None):\n")
-                if classname in reference_keepers:
-                    rlist = reference_keepers[classname]
-                    for ref in rlist:
-                        classes.write("        self.%s = None\n" % ref[1])
-                if classname in [ "virDomain", "virNetwork", "virInterface",
-                                  "virNodeDevice", "virSecret", "virStream",
-                                  "virNWFilter" ]:
-                    classes.write("        self._conn = conn\n")
-                elif classname in [ "virStorageVol", "virStoragePool" ]:
-                    classes.write("        self._conn = conn\n" + \
-                                  "        if not isinstance(conn, virConnect):\n" + \
-                                  "            self._conn = conn._conn\n")
-                elif classname in [ "virDomainSnapshot" ]:
-                    classes.write("        self._dom = dom\n")
-                    classes.write("        self._conn = dom.connect()\n")
-                classes.write("        self._o = _obj\n\n")
+                classes.write("    def __init__(self, _obj=None):\n")
+            if classname in [ "virDomain", "virNetwork", "virInterface",
+                              "virNodeDevice", "virSecret", "virStream",
+                              "virNWFilter" ]:
+                classes.write("        self._conn = conn\n")
+            elif classname in [ "virStorageVol", "virStoragePool" ]:
+                classes.write("        self._conn = conn\n" + \
+                              "        if not isinstance(conn, virConnect):\n" + \
+                              "            self._conn = conn._conn\n")
+            elif classname in [ "virDomainSnapshot" ]:
+                classes.write("        self._dom = dom\n")
+                classes.write("        self._conn = dom.connect()\n")
+            classes.write("        if type(_obj).__name__ not in [\"PyCapsule\", \"PyCObject\"]:\n")
+            classes.write("            raise Exception(\"Expected a wrapped C Object but got %s\" % type(_obj))\n")
+            classes.write("        self._o = _obj\n\n")
             destruct=None
             if classname in classes_destructors:
                 classes.write("    def __del__(self):\n")
@@ -1667,43 +1618,9 @@ def buildWrappers(module):
                         classes.write("\n")
 
                         #
-                        # Sometime one need to keep references of the source
-                        # class in the returned class object.
-                        # See reference_keepers for the list
-                        #
-                        tclass = classes_type[ret[0]][2]
-                        if tclass in reference_keepers:
-                            rlist = reference_keepers[tclass]
-                            for pref in rlist:
-                                if pref[0] == classname:
-                                    classes.write("        __tmp.%s = self\n" %
-                                                  pref[1])
-
-                        # Post-processing - just before we return.
-                        if name in function_post:
-                            classes.write("        %s\n" %
-                                          (function_post[name]))
-
-                        #
                         # return the class
                         #
                         classes.write("        return __tmp\n")
-                    elif ret[0] in converter_type:
-                        #
-                        # Raise an exception
-                        #
-                        if name in functions_noexcept:
-                            classes.write(
-                                "        if ret is None:return None")
-
-                        # Post-processing - just before we return.
-                        if name in function_post:
-                            classes.write("        %s\n" %
-                                          (function_post[name]))
-
-                        classes.write("        return ")
-                        classes.write(converter_type[ret[0]] % ("ret"))
-                        classes.write("\n")
 
                     # For functions returning an integral type there
                     # are several things that we can do, depending on
@@ -1743,61 +1660,41 @@ def buildWrappers(module):
                                                 ": raise libvirtError ('%s() failed')\n") %
                                                ("ret", name))
 
-                        # Post-processing - just before we return.
-                        if name in function_post:
-                            classes.write("        %s\n" %
-                                          (function_post[name]))
-
                         classes.write ("        return ret\n")
 
                     elif is_python_noninteger_type (ret[0]):
                         if name not in functions_noexcept:
-                            if name in functions_list_exception_test:
-                                test = functions_list_exception_test[name]
-                            else:
-                                test = functions_list_default_test
                             if classname == "virConnect":
-                                classes.write (("        if " + test +
+                                classes.write (("        if %s is None" +
                                                 ": raise libvirtError ('%s() failed', conn=self)\n") %
                                                ("ret", name))
                             elif classname == "virDomain":
-                                classes.write (("        if " + test +
+                                classes.write (("        if %s is None" +
                                                 ": raise libvirtError ('%s() failed', dom=self)\n") %
                                                ("ret", name))
                             elif classname == "virNetwork":
-                                classes.write (("        if " + test +
+                                classes.write (("        if %s is None" +
                                                 ": raise libvirtError ('%s() failed', net=self)\n") %
                                                ("ret", name))
                             elif classname == "virInterface":
-                                classes.write (("        if " + test +
+                                classes.write (("        if %s is None" +
                                                 ": raise libvirtError ('%s() failed', net=self)\n") %
                                                ("ret", name))
                             elif classname == "virStoragePool":
-                                classes.write (("        if " + test +
+                                classes.write (("        if %s is None" +
                                                 ": raise libvirtError ('%s() failed', pool=self)\n") %
                                                ("ret", name))
                             elif classname == "virStorageVol":
-                                classes.write (("        if " + test +
+                                classes.write (("        if %s is None" +
                                                 ": raise libvirtError ('%s() failed', vol=self)\n") %
                                                ("ret", name))
                             else:
-                                classes.write (("        if " + test +
+                                classes.write (("        if %s is None" +
                                                 ": raise libvirtError ('%s() failed')\n") %
                                                ("ret", name))
 
-                        # Post-processing - just before we return.
-                        if name in function_post:
-                            classes.write("        %s\n" %
-                                          (function_post[name]))
-
                         classes.write ("        return ret\n")
-
                     else:
-                        # Post-processing - just before we return.
-                        if name in function_post:
-                            classes.write("        %s\n" %
-                                          (function_post[name]))
-
                         classes.write("        return ret\n")
 
                 classes.write("\n")

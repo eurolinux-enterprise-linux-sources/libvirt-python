@@ -538,6 +538,12 @@ def myDomainEventJobCompletedCallback(conn, dom, params, opaque):
 def myDomainEventDeviceRemovalFailedCallback(conn, dom, dev, opaque):
     print("myDomainEventDeviceRemovalFailedCallback: Domain %s(%s) failed to remove device: %s" % (
             dom.name(), dom.ID(), dev))
+def myDomainEventMetadataChangeCallback(conn, dom, mtype, nsuri, opaque):
+    print("myDomainEventMetadataChangeCallback: Domain %s(%s) changed metadata mtype=%d nsuri=%s" % (
+            dom.name(), dom.ID(), mtype, nsuri))
+def myDomainEventBlockThresholdCallback(conn, dom, dev, path, threshold, excess, opaque):
+    print("myDomainEventBlockThresholdCallback: Domain %s(%s) block device %s(%s) threshold %d exceeded by %d" % (
+            dom.name(), dom.ID(), dev, path, threshold, excess))
 
 ##########################################################################
 # Network events
@@ -580,8 +586,42 @@ def myStoragePoolEventLifecycleCallback(conn, pool, event, detail, opaque):
                                                                           storageEventToString(event),
                                                                           detail))
 
-def myStoragePoolEventRefreshCallback(conn, pool, event, detail, opaque):
+def myStoragePoolEventRefreshCallback(conn, pool, opaque):
     print("myStoragePoolEventRefreshCallback: Storage pool %s" % pool.name())
+
+##########################################################################
+# Node device events
+##########################################################################
+def nodeDeviceEventToString(event):
+    nodeDeviceEventStrings = ( "Created",
+                               "Deleted",
+    )
+    return nodeDeviceEventStrings[event]
+
+def myNodeDeviceEventLifecycleCallback(conn, dev, event, detail, opaque):
+    print("myNodeDeviceEventLifecycleCallback: Node device  %s %s %d" % (dev.name(),
+                                                                          nodeDeviceEventToString(event),
+                                                                          detail))
+
+def myNodeDeviceEventUpdateCallback(conn, dev, opaque):
+    print("myNodeDeviceEventUpdateCallback: Node device %s" % dev.name())
+
+##########################################################################
+# Secret events
+##########################################################################
+def secretEventToString(event):
+    secretEventStrings = ( "Defined",
+                           "Undefined",
+    )
+    return secretEventStrings[event]
+
+def mySecretEventLifecycleCallback(conn, secret, event, detail, opaque):
+    print("mySecretEventLifecycleCallback: Secret %s %s %d" % (secret.UUIDString(),
+                                                               secretEventToString(event),
+                                                               detail))
+
+def mySecretEventValueChanged(conn, secret, opaque):
+    print("mySecretEventValueChanged: Secret %s" % secret.UUIDString())
 
 ##########################################################################
 # Set up and run the program
@@ -672,11 +712,19 @@ def main():
     vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_MIGRATION_ITERATION, myDomainEventMigrationIteration, None)
     vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_JOB_COMPLETED, myDomainEventJobCompletedCallback, None)
     vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_DEVICE_REMOVAL_FAILED, myDomainEventDeviceRemovalFailedCallback, None)
+    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_METADATA_CHANGE, myDomainEventMetadataChangeCallback, None)
+    vc.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_BLOCK_THRESHOLD, myDomainEventBlockThresholdCallback, None)
 
     vc.networkEventRegisterAny(None, libvirt.VIR_NETWORK_EVENT_ID_LIFECYCLE, myNetworkEventLifecycleCallback, None)
 
     vc.storagePoolEventRegisterAny(None, libvirt.VIR_STORAGE_POOL_EVENT_ID_LIFECYCLE, myStoragePoolEventLifecycleCallback, None)
     vc.storagePoolEventRegisterAny(None, libvirt.VIR_STORAGE_POOL_EVENT_ID_REFRESH, myStoragePoolEventRefreshCallback, None)
+
+    vc.nodeDeviceEventRegisterAny(None, libvirt.VIR_NODE_DEVICE_EVENT_ID_LIFECYCLE, myNodeDeviceEventLifecycleCallback, None)
+    vc.nodeDeviceEventRegisterAny(None, libvirt.VIR_NODE_DEVICE_EVENT_ID_UPDATE, myNodeDeviceEventUpdateCallback, None)
+
+    vc.secretEventRegisterAny(None, libvirt.VIR_SECRET_EVENT_ID_LIFECYCLE, mySecretEventLifecycleCallback, None)
+    vc.secretEventRegisterAny(None, libvirt.VIR_SECRET_EVENT_ID_VALUE_CHANGED, mySecretEventValueChanged, None)
 
     vc.setKeepAlive(5, 3)
 

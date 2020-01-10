@@ -6,17 +6,14 @@
 
 Summary: The libvirt virtualization API python2 binding
 Name: libvirt-python
-Version: 2.0.0
-Release: 2%{?dist}%{?extra_release}
+Version: 3.2.0
+Release: 3%{?dist}%{?extra_release}
 Source0: http://libvirt.org/sources/python/%{name}-%{version}.tar.gz
-
-Patch1: libvirt-python-Fix-crash-in-storage-pool-refresh-callback.patch
-
 Url: http://libvirt.org
 License: LGPLv2+
 Group: Development/Libraries
 BuildRequires: git
-BuildRequires: libvirt-devel >= 2.0.0-3%{?dist}
+BuildRequires: libvirt-devel >= 3.2.0-9%{?dist}
 BuildRequires: python-devel
 BuildRequires: python-nose
 BuildRequires: python-lxml
@@ -57,42 +54,6 @@ of recent versions of Linux (and other OSes).
 # RPM dependencies, like /usr/bin/python which can pull in python2
 # for the -python3 package
 find examples -type f -exec chmod 0644 \{\} \;
-
-# Patches have to be stored in a temporary file because RPM has
-# a limit on the length of the result of any macro expansion;
-# if the string is longer, it's silently cropped
-%{lua:
-    tmp = os.tmpname();
-    f = io.open(tmp, "w+");
-    count = 0;
-    for i, p in ipairs(patches) do
-        f:write(p.."\n");
-        count = count + 1;
-    end;
-    f:close();
-    print("PATCHCOUNT="..count.."\n")
-    print("PATCHLIST="..tmp.."\n")
-}
-
-git init -q
-git config user.name rpm-build
-git config user.email rpm-build
-git config gc.auto 0
-git add .
-git commit -q -a --author 'rpm-build <rpm-build>' \
-           -m '%{name}-%{version} base'
-
-COUNT=$(grep '\.patch$' $PATCHLIST | wc -l)
-if [ $COUNT -ne $PATCHCOUNT ]; then
-    echo "Found $COUNT patches in $PATCHLIST, expected $PATCHCOUNT"
-    exit 1
-fi
-if [ $COUNT -gt 0 ]; then
-    xargs git am <$PATCHLIST || exit 1
-fi
-echo "Applied $COUNT patches"
-rm -f $PATCHLIST
-
 
 %build
 CFLAGS="$RPM_OPT_FLAGS" %{__python} setup.py build
@@ -135,6 +96,26 @@ rm -f %{buildroot}%{_libdir}/python*/site-packages/*egg-info
 %endif
 
 %changelog
+* Wed Jun  7 2017 Jiri Denemark <jdenemar@redhat.com> - 3.2.0-3
+- rebuild libvirt-python to pickup new flag for virDomainBlockCopy (rhbz#1459183)
+
+* Wed May  3 2017 Jiri Denemark <jdenemar@redhat.com> - 3.2.0-2
+- Rebuild libvirt-python (rhbz#1382642)
+
+* Mon Apr  3 2017 Jiri Denemark <jdenemar@redhat.com> - 3.2.0-1
+- Rebased to libvirt-python-3.2.0 (rhbz#1382642)
+
+* Fri Mar  3 2017 Jiri Denemark <jdenemar@redhat.com> - 3.1.0-1
+- Rebased to libvirt-python-3.1.0 (rhbz#1382642)
+
+* Tue Feb  7 2017 Jiri Denemark <jdenemar@redhat.com> - 3.0.0-1
+- Rebased to libvirt-python-3.0.0 (rhbz#1382642)
+
+* Tue Dec  6 2016 Jiri Denemark <jdenemar@redhat.com> - 2.5.0-1
+- Rebased to libvirt-python-2.5.0 (rhbz#1382642)
+- The rebase also fixes the following bugs:
+    rhbz#1377071
+
 * Mon Aug  1 2016 Jiri Denemark <jdenemar@redhat.com> - 2.0.0-2
 - Fix crash in storage pool refresh callback (rhbz#1354271)
 

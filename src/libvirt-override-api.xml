@@ -410,6 +410,12 @@
       <return type='char *' info='the list of information or None in case of error'/>
       <arg name='vol' type='virStorageVolPtr' info='a storage vol object'/>
     </function>
+    <function name='virStorageVolGetInfoFlags' file='python'>
+      <info>Extract information about a storage volume. Note that if the connection used to get the domain is limited only a partial set of the information can be extracted.</info>
+      <return type='char *' info='the list of information or None in case of error'/>
+      <arg name='vol' type='virStorageVolPtr' info='a storage vol object'/>
+      <arg name='flags' type='unsigned int' info='bitwise-OR of virStorageVolInfoFlags'/>
+    </function>
     <function name='virNodeListDevices' file='python'>
       <info>list the node devices</info>
       <arg name='conn' type='virConnectPtr' info='pointer to the hypervisor connection'/>
@@ -697,6 +703,12 @@
       <arg name='source' type='unsigned int' info='the data source'/>
       <arg name='flags' type='unsigned int' info='extra flags; not used yet, so callers should always pass 0'/>
       <return type='char *' info="dictionary of domain interfaces along with their MAC and IP addresses"/>
+    </function>
+    <function name='virDomainGetGuestVcpus' file='python'>
+      <info>returns a dictionary containing information regarding guest vcpus</info>
+      <arg name='dom' type='virDomainPtr' info='pointer to the domain'/>
+      <arg name='flags' type='unsigned int' info='extra flags; not used yet, so callers should always pass 0'/>
+      <return type='int' info="dictionary of vcpu data returned by the guest agent"/>
     </function>
   </symbols>
 </api>

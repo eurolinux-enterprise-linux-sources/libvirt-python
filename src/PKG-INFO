@@ -1,12 +1,15 @@
 Metadata-Version: 1.1
 Name: libvirt-python
-Version: 2.0.0
-Summary: The libvirt virtualization API
+Version: 3.2.0
+Summary: The libvirt virtualization API python binding
 Home-page: http://www.libvirt.org
 Author: Libvirt Maintainers
 Author-email: libvir-list@redhat.com
-License: UNKNOWN
-Description: UNKNOWN
+License: LGPLv2+
+Description: The libvirt-python package provides a module that permits applications
+        written in the Python programming language to call the interface
+        supplied by the libvirt library, to manage the virtualization capabilities
+        of recent versions of Linux (and other OSes).
 Platform: UNKNOWN
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers

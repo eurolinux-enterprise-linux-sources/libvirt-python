@@ -28,6 +28,8 @@ _pkgcfg = -1
 def get_pkgcfg(do_fail=True):
     global _pkgcfg
     if _pkgcfg == -1:
+        _pkgcfg = os.getenv('PKG_CONFIG')
+    if _pkgcfg is None:
         _pkgcfg = distutils.spawn.find_executable("pkg-config")
     if _pkgcfg is None and do_fail:
         raise Exception("pkg-config binary is required to compile libvirt-python")
@@ -275,6 +277,20 @@ class my_test(Command):
             self.build_platlib = os.path.join(self.build_base,
                                               'lib' + plat_specifier)
 
+    def find_nosetests_path(self):
+        paths = [
+            "/usr/bin/nosetests-%d.%d" % (sys.version_info[0],
+                                          sys.version_info[1]),
+            "/usr/bin/nosetests-%d" % (sys.version_info[0]),
+            "/usr/bin/nosetests",
+        ]
+
+        for path in paths:
+            if os.path.exists(path):
+                return path
+
+        raise Exception("Cannot find any nosetests binary")
+
     def run(self):
         """
         Run test suite
@@ -287,7 +303,8 @@ class my_test(Command):
         else:
             os.environ["PYTHONPATH"] = self.build_platlib
         self.spawn([sys.executable, "sanitytest.py", self.build_platlib, apis[0]])
-        self.spawn([sys.executable, "/usr/bin/nosetests"])
+        nose = self.find_nosetests_path()
+        self.spawn([sys.executable, nose])
 
 
 class my_clean(clean):
@@ -305,11 +322,17 @@ class my_clean(clean):
 _c_modules, _py_modules = get_module_lists()
 
 setup(name = 'libvirt-python',
-      version = '2.0.0',
+      version = '3.2.0',
       url = 'http://www.libvirt.org',
       maintainer = 'Libvirt Maintainers',
       maintainer_email = 'libvir-list@redhat.com',
-      description = 'The libvirt virtualization API',
+      description = 'The libvirt virtualization API python binding',
+      long_description =
+        '''The libvirt-python package provides a module that permits applications
+written in the Python programming language to call the interface
+supplied by the libvirt library, to manage the virtualization capabilities
+of recent versions of Linux (and other OSes).''',
+      license = 'LGPLv2+',
       ext_modules = _c_modules,
       py_modules = _py_modules,
       package_dir = {

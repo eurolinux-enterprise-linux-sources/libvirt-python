@@ -243,6 +243,24 @@
         cb(self, virDomain(self, _obj=dom), devAlias, opaque)
         return 0
 
+    def _dispatchDomainEventMetadataChangeCallback(self, dom, mtype, nsuri, cbData):
+        """Dispatches event to python user domain metadata change event callbacks
+        """
+        cb = cbData["cb"]
+        opaque = cbData["opaque"]
+
+        cb(self, virDomain(self, _obj=dom), mtype, nsuri, opaque)
+        return 0
+
+    def _dispatchDomainEventBlockThresholdCallback(self, dom, dev, path, threshold, excess, cbData):
+        """Dispatches event to python user domain block device threshold event callbacks
+        """
+        cb = cbData["cb"]
+        opaque = cbData["opaque"]
+
+        cb(self, virDomain(self, _obj=dom), dev, path, threshold, excess, opaque)
+        return 0
+
     def domainEventDeregisterAny(self, callbackID):
         """Removes a Domain Event Callback. De-registering for a
            domain callback will disable delivery of this event type """
@@ -345,6 +363,94 @@
         if ret == -1:
             raise libvirtError ('virConnectStoragePoolEventRegisterAny() failed', conn=self)
         self.storagePoolEventCallbackID[ret] = opaque
+        return ret
+
+    def _dispatchNodeDeviceEventLifecycleCallback(self, dev, event, detail, cbData):
+        """Dispatches events to python user node device
+           lifecycle event callbacks
+        """
+        cb = cbData["cb"]
+        opaque = cbData["opaque"]
+
+        cb(self, virNodeDevice(self, _obj=dev), event, detail, opaque)
+        return 0
+
+    def _dispatchNodeDeviceEventGenericCallback(self, dev, cbData):
+        """Dispatches events to python user node device
+           generic event callbacks
+        """
+        cb = cbData["cb"]
+        opaque = cbData["opaque"]
+
+        cb(self, virNodeDevice(self, _obj=dev), opaque)
+        return 0
+
+    def nodeDeviceEventDeregisterAny(self, callbackID):
+        """Removes a Node Device Event Callback. De-registering for a
+           node device callback will disable delivery of this event type"""
+        try:
+            ret = libvirtmod.virConnectNodeDeviceEventDeregisterAny(self._o, callbackID)
+            if ret == -1: raise libvirtError ('virConnectNodeDeviceEventDeregisterAny() failed', conn=self)
+            del self.nodeDeviceEventCallbackID[callbackID]
+        except AttributeError:
+            pass
+
+    def nodeDeviceEventRegisterAny(self, dev, eventID, cb, opaque):
+        """Adds a Node Device Event Callback. Registering for a node device
+           callback will enable delivery of the events"""
+        if not hasattr(self, 'nodeDeviceEventCallbackID'):
+            self.nodeDeviceEventCallbackID = {}
+        cbData = { "cb": cb, "conn": self, "opaque": opaque }
+        if dev is None:
+            ret = libvirtmod.virConnectNodeDeviceEventRegisterAny(self._o, None, eventID, cbData)
+        else:
+            ret = libvirtmod.virConnectNodeDeviceEventRegisterAny(self._o, dev._o, eventID, cbData)
+        if ret == -1:
+            raise libvirtError ('virConnectNodeDeviceEventRegisterAny() failed', conn=self)
+        self.nodeDeviceEventCallbackID[ret] = opaque
+        return ret
+
+    def _dispatchSecretEventLifecycleCallback(self, secret, event, detail, cbData):
+        """Dispatches events to python user secret lifecycle event callbacks
+        """
+        cb = cbData["cb"]
+        opaque = cbData["opaque"]
+
+        cb(self, virSecret(self, _obj=secret), event, detail, opaque)
+        return 0
+
+    def _dispatchSecretEventGenericCallback(self, secret, cbData):
+        """Dispatches events to python user secret generic event callbacks
+        """
+        cb = cbData["cb"]
+        opaque = cbData["opaque"]
+
+        cb(self, virSecret(self, _obj=secret), opaque)
+        return 0
+
+    def secretEventDeregisterAny(self, callbackID):
+        """Removes a Secret Event Callback. De-registering for a
+           secret callback will disable delivery of this event type"""
+        try:
+            ret = libvirtmod.virConnectSecretEventDeregisterAny(self._o, callbackID)
+            if ret == -1: raise libvirtError ('virConnectSecretEventDeregisterAny() failed', conn=self)
+            del self.secretEventCallbackID[callbackID]
+        except AttributeError:
+            pass
+
+    def secretEventRegisterAny(self, secret, eventID, cb, opaque):
+        """Adds a Secret Event Callback. Registering for a secret
+           callback will enable delivery of the events"""
+        if not hasattr(self, 'secretEventCallbackID'):
+            self.secretEventCallbackID = {}
+        cbData = { "cb": cb, "conn": self, "opaque": opaque }
+        if secret is None:
+            ret = libvirtmod.virConnectSecretEventRegisterAny(self._o, None, eventID, cbData)
+        else:
+            ret = libvirtmod.virConnectSecretEventRegisterAny(self._o, secret._o, eventID, cbData)
+        if ret == -1:
+            raise libvirtError ('virConnectSecretEventRegisterAny() failed', conn=self)
+        self.secretEventCallbackID[ret] = opaque
         return ret
 
     def listAllDomains(self, flags=0):
