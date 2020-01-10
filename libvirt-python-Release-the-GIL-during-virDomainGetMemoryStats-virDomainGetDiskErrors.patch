@@ -1,0 +1,61 @@
+From f4d5082f6946e4afb4326d1d37f413fed16bf7e2 Mon Sep 17 00:00:00 2001
+Message-Id: <f4d5082f6946e4afb4326d1d37f413fed16bf7e2@dist-git>
+From: Nir Soffer <nirsof@gmail.com>
+Date: Mon, 2 Oct 2017 09:59:00 +0200
+Subject: [PATCH] Release the GIL during virDomainGetMemoryStats &
+ virDomainGetDiskErrors
+
+We discovered that the entire python process get stuck for about 30
+seconds when calling virDomain.getMemoryStats() if libvirt is stuck in
+virConnect.getAllDomainStats() on inaccessible storage. This blocking
+cause a horrible mess in oVirt.
+
+This patches adds the standard *_ALLOW_THREADS around the call to avoid
+this unwanted blocking.
+
+Signed-off-by: Nir Soffer <nirsof@gmail.com>
+(cherry picked from commit 7af7450b0ac6bd69181f3c8d2360f4f97478191c)
+
+Conflicts:
+        libvirt-override.c
+
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1497197
+
+Signed-off-by: Pavel Hrdina <phrdina@redhat.com>
+Signed-off-by: Jiri Denemark <jdenemar@redhat.com>
+---
+ libvirt-override.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/libvirt-override.c b/libvirt-override.c
+index 93c7ef0..dc81274 100644
+--- a/libvirt-override.c
++++ b/libvirt-override.c
+@@ -363,8 +363,11 @@ libvirt_virDomainMemoryStats(PyObject *self ATTRIBUTE_UNUSED,
+         return NULL;
+     domain = (virDomainPtr) PyvirDomain_Get(pyobj_domain);
+ 
++    LIBVIRT_BEGIN_ALLOW_THREADS;
+     nr_stats = virDomainMemoryStats(domain, stats,
+                                     VIR_DOMAIN_MEMORY_STAT_NR, 0);
++    LIBVIRT_END_ALLOW_THREADS;
++
+     if (nr_stats == -1)
+         return VIR_PY_NONE;
+ 
+@@ -4864,7 +4867,11 @@ libvirt_virDomainGetDiskErrors(PyObject *self ATTRIBUTE_UNUSED,
+ 
+     domain = (virDomainPtr) PyvirDomain_Get(pyobj_domain);
+ 
+-    if ((count = virDomainGetDiskErrors(domain, NULL, 0, 0)) < 0)
++    LIBVIRT_BEGIN_ALLOW_THREADS;
++    count = virDomainGetDiskErrors(domain, NULL, 0, 0);
++    LIBVIRT_END_ALLOW_THREADS;
++
++    if (count < 0)
+         return VIR_PY_NONE;
+     ndisks = count;
+ 
+-- 
+2.14.2
+
