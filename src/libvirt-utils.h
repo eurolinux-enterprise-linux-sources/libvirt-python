@@ -146,6 +146,8 @@ void virFree(void *ptrptr) ATTRIBUTE_NONNULL(1);
 # endif
 
 
+#define VIR_N_ELEMENTS(array) (sizeof(array) / sizeof(*(array)))
+
 /* The two-statement sequence "Py_INCREF(Py_None); return Py_None;"
    is so common that we encapsulate it here.  Now, each use is simply
    return VIR_PY_NONE;  */
@@ -317,7 +319,6 @@ void virTypedParamsClear(virTypedParameterPtr params, int nparams);
 void virTypedParamsFree(virTypedParameterPtr params, int nparams);
 # endif /* ! LIBVIR_CHECK_VERSION(1, 0, 2) */
 
-char * py_str(PyObject *obj);
 PyObject * getPyVirTypedParameter(const virTypedParameter *params,
                                   int nparams);
 virTypedParameterPtr setPyVirTypedParameter(PyObject *info,

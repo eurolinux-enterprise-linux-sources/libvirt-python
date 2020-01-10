@@ -199,20 +199,6 @@ virTypedParamsFree(virTypedParameterPtr params,
 }
 #endif /* ! LIBVIR_CHECK_VERSION(1, 0, 2) */
 
-char *
-py_str(PyObject *obj)
-{
-    PyObject *str = PyObject_Str(obj);
-    char *ret;
-    if (!str) {
-        PyErr_Print();
-        PyErr_Clear();
-        return NULL;
-    };
-    libvirt_charPtrUnwrap(str, &ret);
-    return ret;
-}
-
 /* Helper function to convert a virTypedParameter output array into a
  * Python dictionary for return to the user.  Return NULL on failure,
  * after raising a python exception.  */
@@ -316,8 +302,7 @@ setPyVirTypedParameter(PyObject *info,
     while (PyDict_Next(info, &pos, &key, &value)) {
         char *keystr = NULL;
 
-        if (libvirt_charPtrUnwrap(key, &keystr) < 0 ||
-            keystr == NULL)
+        if (libvirt_charPtrUnwrap(key, &keystr) < 0)
             goto cleanup;
 
         for (i = 0; i < nparams; i++) {
@@ -373,8 +358,7 @@ setPyVirTypedParameter(PyObject *info,
         case VIR_TYPED_PARAM_STRING:
         {
             char *string_val;
-            if (libvirt_charPtrUnwrap(value, &string_val) < 0 ||
-                !string_val)
+            if (libvirt_charPtrUnwrap(value, &string_val) < 0)
                 goto cleanup;
             temp->value.s = string_val;
             break;
@@ -503,7 +487,6 @@ virPyDictToTypedParamOne(virTypedParameterPtr *params,
     {
         char *val;;
         if (libvirt_charPtrUnwrap(value, &val) < 0 ||
-            !val ||
             virTypedParamsAddString(params, n, max, keystr, val) < 0) {
             VIR_FREE(val);
             goto cleanup;
@@ -555,8 +538,7 @@ virPyDictToTypedParams(PyObject *dict,
         return -1;
 
     while (PyDict_Next(dict, &pos, &key, &value)) {
-        if (libvirt_charPtrUnwrap(key, &keystr) < 0 ||
-            !keystr)
+        if (libvirt_charPtrUnwrap(key, &keystr) < 0)
             goto cleanup;
 
         if (PyList_Check(value) || PyTuple_Check(value)) {

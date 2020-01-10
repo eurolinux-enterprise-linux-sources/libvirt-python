@@ -1918,8 +1918,10 @@ virConnectCredCallbackWrapper(virConnectCredentialPtr cred,
             char *result = NULL;
             pycreditem = PyTuple_GetItem(pycred, i);
             pyresult = PyList_GetItem(pycreditem, 4);
-            if (pyresult != Py_None)
+            if (pyresult != Py_None) {
                 libvirt_charPtrUnwrap(pyresult, &result);
+                PyErr_Clear();
+            }
             if (result != NULL) {
                 cred[i].result = result;
                 cred[i].resultlen = strlen(result);
@@ -4444,6 +4446,54 @@ libvirt_virConnectListAllNWFilters(PyObject *self ATTRIBUTE_UNUSED,
 }
 #endif /* LIBVIR_CHECK_VERSION(0, 10, 2) */
 
+#if LIBVIR_CHECK_VERSION(4, 5, 0)
+static PyObject *
+libvirt_virConnectListAllNWFilterBindings(PyObject *self ATTRIBUTE_UNUSED,
+                                          PyObject *args)
+{
+    PyObject *pyobj_conn;
+    PyObject *py_retval = NULL;
+    virConnectPtr conn;
+    virNWFilterBindingPtr *bindings = NULL;
+    int c_retval = 0;
+    ssize_t i;
+    unsigned int flags;
+
+    if (!PyArg_ParseTuple(args, (char *)"OI:virConnectListAllNWFilterBindings",
+                          &pyobj_conn, &flags))
+        return NULL;
+    conn = (virConnectPtr) PyvirConnect_Get(pyobj_conn);
+
+    LIBVIRT_BEGIN_ALLOW_THREADS;
+    c_retval = virConnectListAllNWFilterBindings(conn, &bindings, flags);
+    LIBVIRT_END_ALLOW_THREADS;
+
+    if (c_retval < 0)
+        return VIR_PY_NONE;
+
+    if (!(py_retval = PyList_New(c_retval)))
+        goto cleanup;
+
+    for (i = 0; i < c_retval; i++) {
+        VIR_PY_LIST_SET_GOTO(py_retval, i,
+                             libvirt_virNWFilterBindingPtrWrap(bindings[i]), error);
+        /* python steals the pointer */
+        bindings[i] = NULL;
+    }
+
+ cleanup:
+    for (i = 0; i < c_retval; i++)
+        if (bindings[i])
+            virNWFilterBindingFree(bindings[i]);
+    VIR_FREE(bindings);
+    return py_retval;
+
+ error:
+    Py_CLEAR(py_retval);
+    goto cleanup;
+}
+#endif /* LIBVIR_CHECK_VERSION(4, 5, 0) */
+
 static PyObject *
 libvirt_virConnectListInterfaces(PyObject *self ATTRIBUTE_UNUSED,
                                  PyObject *args)
@@ -4637,8 +4687,7 @@ libvirt_virConnectBaselineCPU(PyObject *self ATTRIBUTE_UNUSED,
 
         for (i = 0; i < ncpus; i++) {
             if (libvirt_charPtrUnwrap(PyList_GetItem(list, i),
-                                      &(xmlcpus[i])) < 0 ||
-                xmlcpus[i] == NULL) {
+                                      &(xmlcpus[i])) < 0) {
                 for (j = 0 ; j < i ; j++)
                     VIR_FREE(xmlcpus[j]);
                 VIR_FREE(xmlcpus);
@@ -6662,11 +6711,11 @@ libvirt_virConnectDomainEventTunableCallback(virConnectPtr conn ATTRIBUTE_UNUSED
     if (!pyobj_ret) {
         DEBUG("%s - ret:%p\n", __FUNCTION__, pyobj_ret);
         PyErr_Print();
-        Py_XDECREF(pyobj_dict);
     } else {
         Py_DECREF(pyobj_ret);
         ret = 0;
     }
+    Py_XDECREF(pyobj_dict);
 
     LIBVIRT_RELEASE_THREAD_STATE;
     return ret;
@@ -7739,6 +7788,58 @@ libvirt_virDomainMigrateGetMaxDowntime(PyObject *self ATTRIBUTE_UNUSED,
 #endif /* LIBVIR_CHECK_VERSION(3, 7, 0) */
 
 #if LIBVIR_CHECK_VERSION(1, 1, 0)
+static virPyTypedParamsHint virPyDomainMigrate3Params[] = {
+# ifdef VIR_MIGRATE_PARAM_URI
+    { VIR_MIGRATE_PARAM_URI, VIR_TYPED_PARAM_STRING },
+# endif
+# ifdef VIR_MIGRATE_PARAM_DEST_NAME
+    { VIR_MIGRATE_PARAM_DEST_NAME, VIR_TYPED_PARAM_STRING },
+# endif
+# ifdef VIR_MIGRATE_PARAM_DEST_XML
+    { VIR_MIGRATE_PARAM_DEST_XML, VIR_TYPED_PARAM_STRING },
+# endif
+# ifdef VIR_MIGRATE_PARAM_PERSIST_XML
+    { VIR_MIGRATE_PARAM_PERSIST_XML, VIR_TYPED_PARAM_STRING },
+# endif
+# ifdef VIR_MIGRATE_PARAM_BANDWIDTH
+    { VIR_MIGRATE_PARAM_BANDWIDTH, VIR_TYPED_PARAM_ULLONG },
+# endif
+# ifdef VIR_MIGRATE_PARAM_GRAPHICS_URI
+    { VIR_MIGRATE_PARAM_GRAPHICS_URI, VIR_TYPED_PARAM_STRING },
+# endif
+# ifdef VIR_MIGRATE_PARAM_LISTEN_ADDRESS
+    { VIR_MIGRATE_PARAM_LISTEN_ADDRESS, VIR_TYPED_PARAM_STRING },
+# endif
+# ifdef VIR_MIGRATE_PARAM_MIGRATE_DISKS
+    { VIR_MIGRATE_PARAM_MIGRATE_DISKS, VIR_TYPED_PARAM_STRING },
+# endif
+# ifdef VIR_MIGRATE_PARAM_DISKS_PORT
+    { VIR_MIGRATE_PARAM_DISKS_PORT, VIR_TYPED_PARAM_INT },
+# endif
+# ifdef VIR_MIGRATE_PARAM_COMPRESSION
+    { VIR_MIGRATE_PARAM_COMPRESSION, VIR_TYPED_PARAM_STRING },
+# endif
+# ifdef VIR_MIGRATE_PARAM_COMPRESSION_MT_LEVEL
+    { VIR_MIGRATE_PARAM_COMPRESSION_MT_LEVEL, VIR_TYPED_PARAM_INT },
+# endif
+# ifdef VIR_MIGRATE_PARAM_COMPRESSION_MT_THREADS
+    { VIR_MIGRATE_PARAM_COMPRESSION_MT_THREADS, VIR_TYPED_PARAM_INT },
+# endif
+# ifdef VIR_MIGRATE_PARAM_COMPRESSION_MT_DTHREADS
+    { VIR_MIGRATE_PARAM_COMPRESSION_MT_DTHREADS, VIR_TYPED_PARAM_INT },
+# endif
+# ifdef VIR_MIGRATE_PARAM_COMPRESSION_XBZRLE_CACHE
+    { VIR_MIGRATE_PARAM_COMPRESSION_XBZRLE_CACHE, VIR_TYPED_PARAM_ULLONG },
+# endif
+# ifdef VIR_MIGRATE_PARAM_AUTO_CONVERGE_INITIAL
+    { VIR_MIGRATE_PARAM_AUTO_CONVERGE_INITIAL, VIR_TYPED_PARAM_INT },
+# endif
+# ifdef VIR_MIGRATE_PARAM_AUTO_CONVERGE_INCREMENT
+    { VIR_MIGRATE_PARAM_AUTO_CONVERGE_INCREMENT, VIR_TYPED_PARAM_INT },
+# endif
+};
+
+
 static PyObject *
 libvirt_virDomainMigrate3(PyObject *self ATTRIBUTE_UNUSED,
                           PyObject *args)
@@ -7750,7 +7851,7 @@ libvirt_virDomainMigrate3(PyObject *self ATTRIBUTE_UNUSED,
     PyObject *dict;
     unsigned int flags;
     virTypedParameterPtr params;
-    int nparams;
+    int nparams = 0;
     virDomainPtr ddom = NULL;
 
     if (!PyArg_ParseTuple(args, (char *) "OOOI:virDomainMigrate3",
@@ -7760,8 +7861,11 @@ libvirt_virDomainMigrate3(PyObject *self ATTRIBUTE_UNUSED,
     domain = (virDomainPtr) PyvirDomain_Get(pyobj_domain);
     dconn = (virConnectPtr) PyvirConnect_Get(pyobj_dconn);
 
-    if (virPyDictToTypedParams(dict, &params, &nparams, NULL, 0) < 0)
+    if (virPyDictToTypedParams(dict, &params, &nparams,
+                               virPyDomainMigrate3Params,
+                               VIR_N_ELEMENTS(virPyDomainMigrate3Params)) < 0) {
         return NULL;
+    }
 
     LIBVIRT_BEGIN_ALLOW_THREADS;
     ddom = virDomainMigrate3(domain, dconn, params, nparams, flags);
@@ -7790,8 +7894,11 @@ libvirt_virDomainMigrateToURI3(PyObject *self ATTRIBUTE_UNUSED,
 
     domain = (virDomainPtr) PyvirDomain_Get(pyobj_domain);
 
-    if (virPyDictToTypedParams(dict, &params, &nparams, NULL, 0) < 0)
+    if (virPyDictToTypedParams(dict, &params, &nparams,
+                               virPyDomainMigrate3Params,
+                               VIR_N_ELEMENTS(virPyDomainMigrate3Params)) < 0) {
         return NULL;
+    }
 
     LIBVIRT_BEGIN_ALLOW_THREADS;
     ret = virDomainMigrateToURI3(domain, dconnuri, params, nparams, flags);
@@ -8185,8 +8292,7 @@ libvirt_virDomainFSFreeze(PyObject *self ATTRIBUTE_UNUSED,
 
         for (i = 0; i < nmountpoints; i++) {
             if (libvirt_charPtrUnwrap(PyList_GetItem(pyobj_list, i),
-                                      mountpoints+i) < 0 ||
-                mountpoints[i] == NULL)
+                                      mountpoints+i) < 0)
                 goto cleanup;
         }
     }
@@ -8233,8 +8339,7 @@ libvirt_virDomainFSThaw(PyObject *self ATTRIBUTE_UNUSED,
 
         for (i = 0; i < nmountpoints; i++) {
             if (libvirt_charPtrUnwrap(PyList_GetItem(pyobj_list, i),
-                                      mountpoints+i) < 0 ||
-                mountpoints[i] == NULL)
+                                      mountpoints+i) < 0)
                 goto cleanup;
         }
     }
@@ -8639,6 +8744,13 @@ libvirt_virDomainListGetStats(PyObject *self ATTRIBUTE_UNUSED,
 }
 
 
+static virPyTypedParamsHint virPyDomainBlockCopyParams[] = {
+    { VIR_DOMAIN_BLOCK_COPY_BANDWIDTH, VIR_TYPED_PARAM_ULLONG },
+    { VIR_DOMAIN_BLOCK_COPY_GRANULARITY, VIR_TYPED_PARAM_UINT },
+    { VIR_DOMAIN_BLOCK_COPY_BUF_SIZE, VIR_TYPED_PARAM_ULLONG },
+};
+
+
 static PyObject *
 libvirt_virDomainBlockCopy(PyObject *self ATTRIBUTE_UNUSED,
                            PyObject *args)
@@ -8659,8 +8771,11 @@ libvirt_virDomainBlockCopy(PyObject *self ATTRIBUTE_UNUSED,
         return NULL;
 
     if (PyDict_Check(pyobj_dict)) {
-        if (virPyDictToTypedParams(pyobj_dict, &params, &nparams, NULL, 0) < 0)
+        if (virPyDictToTypedParams(pyobj_dict, &params, &nparams,
+                                   virPyDomainBlockCopyParams,
+                                   VIR_N_ELEMENTS(virPyDomainBlockCopyParams)) < 0) {
             return NULL;
+        }
     }
 
     dom = (virDomainPtr) PyvirDomain_Get(pyobj_dom);
@@ -9640,6 +9755,132 @@ libvirt_virStreamRecvFlags(PyObject *self ATTRIBUTE_UNUSED,
 #endif /* LIBVIR_CHECK_VERSION(3, 4, 0) */
 
 
+#if LIBVIR_CHECK_VERSION(4, 4, 0)
+static PyObject *
+libvirt_virConnectBaselineHypervisorCPU(PyObject *self ATTRIBUTE_UNUSED,
+                                        PyObject *args)
+{
+    virConnectPtr conn;
+    PyObject *pyobj_conn;
+    char *emulator;
+    char *arch;
+    char *machine;
+    char *virttype;
+    PyObject *list;
+    unsigned int flags;
+    char **xmlCPUs = NULL;
+    int ncpus = 0;
+    size_t i;
+    char *cpu;
+    PyObject *ret = NULL;
+
+    if (!PyArg_ParseTuple(args, (char *)"OzzzzOI:virConnectBaselineHypervisorCPU",
+                          &pyobj_conn, &emulator, &arch, &machine, &virttype,
+                          &list, &flags))
+        return NULL;
+
+    conn = (virConnectPtr) PyvirConnect_Get(pyobj_conn);
+
+    if (PyList_Check(list)) {
+        ncpus = PyList_Size(list);
+        if (VIR_ALLOC_N(xmlCPUs, ncpus) < 0)
+            return PyErr_NoMemory();
+
+        for (i = 0; i < ncpus; i++) {
+            if (libvirt_charPtrUnwrap(PyList_GetItem(list, i),
+                                      &(xmlCPUs[i])) < 0)
+                goto cleanup;
+        }
+    }
+
+    LIBVIRT_BEGIN_ALLOW_THREADS;
+    cpu = virConnectBaselineHypervisorCPU(conn, emulator, arch, machine, virttype,
+                                          (const char **)xmlCPUs, ncpus, flags);
+    LIBVIRT_END_ALLOW_THREADS;
+
+    ret = libvirt_constcharPtrWrap(cpu);
+
+ cleanup:
+    for (i = 0; i < ncpus; i++)
+        VIR_FREE(xmlCPUs[i]);
+    VIR_FREE(xmlCPUs);
+    VIR_FREE(cpu);
+
+    return ret;
+}
+#endif /* LIBVIR_CHECK_VERSION(4, 4, 0) */
+
+
+#if LIBVIR_CHECK_VERSION(4, 5, 0)
+static PyObject *
+libvirt_virDomainGetLaunchSecurityInfo(PyObject *self ATTRIBUTE_UNUSED,
+                                       PyObject *args)
+{
+    PyObject *pyobj_dom = NULL;
+    PyObject *ret = NULL;
+
+    virDomainPtr dom = NULL;
+    virTypedParameterPtr params = NULL;
+    int nparams = 0;
+    unsigned int flags = 0;
+    int i_retval;
+
+    if (!PyArg_ParseTuple(args, (char *)"OI:virDomainGetLaunchSecurityInfo",
+                          &pyobj_dom, &flags))
+        return NULL;
+    dom = (virDomainPtr) PyvirDomain_Get(pyobj_dom);
+
+    LIBVIRT_BEGIN_ALLOW_THREADS;
+    i_retval = virDomainGetLaunchSecurityInfo(dom, &params, &nparams, flags);
+    LIBVIRT_END_ALLOW_THREADS;
+
+    if (i_retval < 0) {
+        ret = VIR_PY_NONE;
+        goto cleanup;
+    }
+
+    ret = getPyVirTypedParameter(params, nparams);
+ cleanup:
+    virTypedParamsFree(params, nparams);
+    return ret;
+}
+
+
+static PyObject *
+libvirt_virNodeGetSEVInfo(PyObject *self ATTRIBUTE_UNUSED,
+                          PyObject *args)
+{
+    PyObject *pyobj_conn = NULL;
+    PyObject *ret = NULL;
+
+    virConnectPtr conn = NULL;
+    virTypedParameterPtr params = NULL;
+    int nparams = 0;
+    unsigned int flags = 0;
+    int i_retval;
+
+    if (!PyArg_ParseTuple(args, (char *)"OI:virNodeGetSEVInfo",
+                          &pyobj_conn, &flags))
+        return NULL;
+    conn = (virConnectPtr) PyvirConnect_Get(pyobj_conn);
+
+    LIBVIRT_BEGIN_ALLOW_THREADS;
+    i_retval = virNodeGetSEVInfo(conn, &params, &nparams, flags);
+    LIBVIRT_END_ALLOW_THREADS;
+
+    if (i_retval < 0) {
+        ret = VIR_PY_NONE;
+        goto cleanup;
+    }
+
+    ret = getPyVirTypedParameter(params, nparams);
+ cleanup:
+    virTypedParamsFree(params, nparams);
+    return ret;
+}
+#endif /* LIBVIR_CHECK_VERSION(4, 5, 0) */
+
+
 /************************************************************************
  *									*
  *			The registration stuff				*
@@ -9778,6 +10019,9 @@ static PyMethodDef libvirtMethods[] = {
 #if LIBVIR_CHECK_VERSION(0, 10, 2)
     {(char *) "virConnectListAllNWFilters", libvirt_virConnectListAllNWFilters, METH_VARARGS, NULL},
 #endif /* LIBVIR_CHECK_VERSION(0, 10, 2) */
+#if LIBVIR_CHECK_VERSION(4, 5, 0)
+    {(char *) "virConnectListAllNWFilterBindings", libvirt_virConnectListAllNWFilterBindings, METH_VARARGS, NULL},
+#endif /* LIBVIR_CHECK_VERSION(4, 5, 0) */
     {(char *) "virConnectListInterfaces", libvirt_virConnectListInterfaces, METH_VARARGS, NULL},
     {(char *) "virConnectListDefinedInterfaces", libvirt_virConnectListDefinedInterfaces, METH_VARARGS, NULL},
 #if LIBVIR_CHECK_VERSION(0, 10, 2)
@@ -9873,6 +10117,13 @@ static PyMethodDef libvirtMethods[] = {
     {(char *) "virStreamSendHole", libvirt_virStreamSendHole, METH_VARARGS, NULL},
     {(char *) "virStreamRecvFlags", libvirt_virStreamRecvFlags, METH_VARARGS, NULL},
 #endif /* LIBVIR_CHECK_VERSION(3, 4, 0) */
+#if LIBVIR_CHECK_VERSION(4, 4, 0)
+    {(char *) "virConnectBaselineHypervisorCPU", libvirt_virConnectBaselineHypervisorCPU, METH_VARARGS, NULL},
+#endif /* LIBVIR_CHECK_VERSION(4, 4, 0) */
+#if LIBVIR_CHECK_VERSION(4, 5, 0)
+    {(char *) "virDomainGetLaunchSecurityInfo", libvirt_virDomainGetLaunchSecurityInfo, METH_VARARGS, NULL},
+    {(char *) "virNodeGetSEVInfo", libvirt_virNodeGetSEVInfo, METH_VARARGS, NULL},
+#endif /* LIBVIR_CHECK_VERSION(4, 5, 0) */
     {NULL, NULL, 0, NULL}
 };
 

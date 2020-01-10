@@ -384,8 +384,11 @@ libvirt_charPtrUnwrap(PyObject *obj,
 #else
     ret = PyString_AsString(obj);
 #endif
-    if (ret)
+    if (ret) {
         *str = strdup(ret);
+        if (!*str)
+            PyErr_NoMemory();
+    }
 #if PY_MAJOR_VERSION > 2
     Py_DECREF(bytes);
 #endif
@@ -536,6 +539,19 @@ libvirt_virNWFilterPtrWrap(virNWFilterPtr node)
     }
 
     ret = libvirt_buildPyObject(node, "virNWFilterPtr", NULL);
+    return ret;
+}
+
+PyObject *
+libvirt_virNWFilterBindingPtrWrap(virNWFilterBindingPtr node)
+{
+    PyObject *ret;
+
+    if (node == NULL) {
+        return VIR_PY_NONE;
+    }
+
+    ret = libvirt_buildPyObject(node, "virNWFilterBindingPtr", NULL);
     return ret;
 }
 

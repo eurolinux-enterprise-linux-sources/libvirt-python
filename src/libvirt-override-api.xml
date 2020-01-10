@@ -485,6 +485,12 @@
       <arg name='flags' type='unsigned int' info='optional flags'/>
       <return type='char *' info='the list of network filters or None in case of error'/>
     </function>
+    <function name='virConnectListAllNWFilterBindings' file='python'>
+      <info>returns list of all network fitler bindings</info>
+      <arg name='conn' type='virConnectPtr' info='pointer to the hypervisor connection'/>
+      <arg name='flags' type='unsigned int' info='optional flags'/>
+      <return type='char *' info='the list of network filter bindings or None in case of error'/>
+    </function>
     <function name='virNWFilterLookupByUUID' file='python'>
       <info>Try to lookup a network filter on the given hypervisor based on its UUID.</info>
       <return type='virNWFilterPtr' info='a new network filter object or NULL in case of failure'/>
@@ -716,6 +722,29 @@
       <arg name='dom' type='virDomainPtr' info='pointer to the domain'/>
       <arg name='flags' type='unsigned int' info='extra flags; not used yet, so callers should always pass 0'/>
       <return type='int' info="dictionary of vcpu data returned by the guest agent"/>
+    </function>
+    <function name='virConnectBaselineHypervisorCPU' file='python'>
+      <info>Computes the most feature-rich CPU which is compatible with all given CPUs and can be provided by the specified hypervisor.</info>
+      <return type='char *' info='XML description of the computed CPU or NULL on error.'/>
+      <arg name='conn' type='virConnectPtr' info='pointer to the hypervisor connection'/>
+      <arg name='emulator' type='const char *' info='path to the emulator binary'/>
+      <arg name='arch' type='const char *' info='CPU architecture'/>
+      <arg name='machine' type='const char *' info='machine type'/>
+      <arg name='virttype' type='const char *' info='virtualization type'/>
+      <arg name='xmlCPUs' type='const char **' info='array of XML descriptions of CPUs'/>
+      <arg name='flags' type='unsigned int' info='bitwise-OR of virConnectBaselineCPUFlags'/>
+    </function>
+    <function name='virDomainGetLaunchSecurityInfo' file='python'>
+      <info>Get launch security info for a domain</info>
+      <return type='char *' info='None in case of error, returns a dictionary of params'/>
+      <arg name='domain' type='virDomainPtr' info='pointer to domain object'/>
+      <arg name='flags' type='int' info='unused, always pass 0'/>
+    </function>
+    <function name='virNodeGetSEVInfo' file='python'>
+      <info>Get platform specific information from the SEV firmware</info>
+      <return type='char *' info='None in case of error, returns a dictionary of params'/>
+      <arg name='conn' type='virConnectPtr' info='pointer to hypervisor connection'/>
+      <arg name='flags' type='int' info='unused, always pass 0'/>
     </function>
   </symbols>
 </api>

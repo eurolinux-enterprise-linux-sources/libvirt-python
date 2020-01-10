@@ -1,4 +1,4 @@
-#!/usr/bin/python -u
+#!/usr/bin/env python
 #
 #
 #
@@ -605,6 +605,8 @@ def storageEventToString(event):
                             "Undefined",
                             "Started",
                             "Stopped",
+                            "Created",
+                            "Deleted",
     )
     return storageEventStrings[event]
 
@@ -666,8 +668,8 @@ def myConnectionCloseCallback(conn, reason, opaque):
 def usage():
     print("usage: "+os.path.basename(sys.argv[0])+" [-hdl] [uri]")
     print("   uri will default to qemu:///system")
-    print("   --help, -h   Print(this help message")
-    print("   --debug, -d  Print(debug output")
+    print("   --help, -h   Print this help message")
+    print("   --debug, -d  Print debug output")
     print("   --loop=TYPE, -l   Choose event-loop-implementation (native, poll, asyncio)")
     print("   --timeout=SECS  Quit after SECS seconds running")
 

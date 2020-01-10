@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import sys
 import lxml
@@ -234,7 +234,9 @@ for name in sorted(basicklassmap):
                     "ErrorFunc", "FreeError",
                     "SaveLastError", "ResetError"]:
             continue
-        elif func in ["GetLastError", "GetLastErrorMessage", "ResetLastError", "Initialize"]:
+        elif func in ["GetLastError", "GetLastErrorMessage",
+                      "GetLastErrorCode", "GetLastErrorDomain",
+                      "ResetLastError", "Initialize"]:
             func = "vir" + func
         elif func == "SetErrorFunc":
             func = "RegisterErrorHandler"
@@ -258,7 +260,8 @@ for name in sorted(basicklassmap):
                 "LookupByUUIDString", "LookupByVolume" "LookupByName",
                 "LookupByID", "LookupByName", "LookupByKey", "LookupByPath",
                 "LookupByMACString", "LookupByUsage", "LookupByVolume",
-                "LookupSCSIHostByWWN", "Restore", "RestoreFlags",
+                "LookupByTargetPath","LookupSCSIHostByWWN", "LookupByPortDev",
+                "Restore", "RestoreFlags",
                 "SaveImageDefineXML", "SaveImageGetXMLDesc", "DefineXMLFlags"]:
         if klass != "virDomain":
             func = klass[3:] + func

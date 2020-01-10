@@ -11,6 +11,12 @@
             libvirtmod.virConnectClose(self._o)
         self._o = None
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type_, exc_value_, traceback_):
+        self.close()
+
     def domainEventDeregister(self, cb):
         """Removes a Domain Event Callback. De-registering for a
            domain callback will disable delivery of this event type """
@@ -522,6 +528,18 @@
         retlist = list()
         for filter_ptr in ret:
             retlist.append(virNWFilter(self, _obj=filter_ptr))
+
+        return retlist
+
+    def listAllNWFilterBindings(self, flags=0):
+        """Returns a list of network filter binding objects"""
+        ret = libvirtmod.virConnectListAllNWFilterBindings(self._o, flags)
+        if ret is None:
+            raise libvirtError("virConnectListAllNWFilterBindings() failed", conn=self)
+
+        retlist = list()
+        for filter_ptr in ret:
+            retlist.append(virNWFilterBinding(self, _obj=filter_ptr))
 
         return retlist
 

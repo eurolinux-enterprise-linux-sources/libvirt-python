@@ -11,6 +11,8 @@ The individual contributors are
 
    Adam Litke <agl@us.ibm.com>
    Alex Jia <ajia@redhat.com>
+   Andrea Bolognani <abologna@redhat.com>
+   Boris Fiuczynski <fiuczy@linux.vnet.ibm.com>
    Brian Rak <brak@gameservers.com>
    Chris Lalancette <clalance@redhat.com>
    Claudio Bley <cbley@av-test.de>
@@ -18,12 +20,15 @@ The individual contributors are
    Cédric Bosdonnat <cbosdonnat@suse.com>
    Dan Kenigsberg <danken@redhat.com>
    Daniel P. Berrange <berrange@redhat.com>
+   Daniel P. Berrangé <berrange@redhat.com>
    Daniel Veillard <veillard@redhat.com>
    Diego Elio Pettenò <flameeyes@gmail.com>
    Dmitry Guryanov <dguryanov@parallels.com>
    Don Dugger <donald.d.dugger@intel.com>
    Doug Goldstein <cardoe@cardoe.com>
+   Edgar Kaziakhmedov <edgar.kaziakhmedov@virtuozzo.com>
    Eric Blake <eblake@redhat.com>
+   Erik Skultety <eskultet@redhat.com>
    Federico Simoncelli <fsimonce@redhat.com>
    Giuseppe Scrivano <gscrivan@redhat.com>
    Guan Qiang <hzguanqiang@corp.netease.com>
@@ -44,6 +49,7 @@ The individual contributors are
    Laine Stump <laine@laine.org>
    Lei Li <lilei@linux.vnet.ibm.com>
    Luyao Huang <lhuang@redhat.com>
+   Marc Hartmayer <mhartmay@linux.vnet.ibm.com>
    Marcelo Cerri <mhcerri@linux.vnet.ibm.com>
    Marian Neagul <marian@info.uvt.ro>
    Mark McLoughlin <markmc@redhat.com>
@@ -62,6 +68,7 @@ The individual contributors are
    Oskari Saarenmaa <os@ohmu.fi>
    Pavel Boldin <pboldin@mirantis.com>
    Pavel Hrdina <phrdina@redhat.com>
+   Peng Hao <peng.hao2@zte.com.cn>
    Peter Krempa <pkrempa@redhat.com>
    Philipp Hahn <hahn@univention.de>
    Prabodh Agarwal <prabodh1194@users.noreply.github.com>
